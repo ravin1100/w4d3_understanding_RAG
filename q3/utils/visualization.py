@@ -10,21 +10,23 @@ def render_chunk_preview(chunk: Chunk, index: int) -> None:
         chunk (Chunk): The chunk to render
         index (int): Index of the chunk in the list
     """
-    with st.expander(f"Chunk {index + 1} ({chunk.length} chars)"):
-        # Display metadata
-        st.markdown("**Metadata:**")
-        st.json({
-            "id": chunk.id,
-            "start_char": chunk.start_char,
-            "end_char": chunk.end_char,
-            "length": chunk.length,
-            "overlap_prev": chunk.overlap_prev,
-            "overlap_next": chunk.overlap_next
-        })
+    with st.expander(f"📄 Chunk {index + 1}"):
+        # Create two columns for metadata and text
+        col1, col2 = st.columns([1, 2])
         
-        # Display text preview
-        st.markdown("**Text:**")
-        st.text(chunk.text[:500] + "..." if len(chunk.text) > 500 else chunk.text)
+        with col1:
+            st.markdown("**📊 Chunk Info**")
+            st.markdown(f"• Length: {chunk.length} characters")
+            st.markdown(f"• Position: {chunk.start_char} → {chunk.end_char}")
+            if chunk.overlap_prev > 0:
+                st.markdown(f"• Overlap with previous: {chunk.overlap_prev} chars")
+            if chunk.overlap_next > 0:
+                st.markdown(f"• Overlap with next: {chunk.overlap_next} chars")
+        
+        with col2:
+            st.markdown("**📝 Content Preview**")
+            preview = chunk.text[:500] + "..." if len(chunk.text) > 500 else chunk.text
+            st.markdown(f"```text\n{preview}\n```")
 
 def render_chunks_table(chunks: List[Chunk]) -> None:
     """Render a table view of chunks in Streamlit.
@@ -32,19 +34,43 @@ def render_chunks_table(chunks: List[Chunk]) -> None:
     Args:
         chunks (List[Chunk]): List of chunks to render
     """
-    # Convert chunks to DataFrame
+    # Convert chunks to DataFrame with simplified columns
     chunks_data = [{
-        "Chunk ID": chunk.id,
-        "Length": chunk.length,
-        "Start": chunk.start_char,
-        "End": chunk.end_char,
-        "Overlap Prev": chunk.overlap_prev,
-        "Overlap Next": chunk.overlap_next,
-        "Preview": chunk.text[:50] + "..."
-    } for chunk in chunks]
+        "Chunk #": f"Chunk {i+1}",
+        "Length": f"{chunk.length} chars",
+        "Preview": chunk.text[:100] + "..." if len(chunk.text) > 100 else chunk.text,
+        "Overlaps": f"Prev: {chunk.overlap_prev}, Next: {chunk.overlap_next}" if (chunk.overlap_prev > 0 or chunk.overlap_next > 0) else "None"
+    } for i, chunk in enumerate(chunks)]
     
     df = pd.DataFrame(chunks_data)
-    st.dataframe(df)
+    
+    # Add custom CSS to ensure table takes full width
+    st.markdown("""
+        <style>
+        .stDataFrame {
+            width: 100%;
+        }
+        .stDataFrame > div {
+            width: 100%;
+        }
+        .stDataFrame table {
+            width: 100% !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    # Render table with full width configuration
+    st.dataframe(
+        df,
+        column_config={
+            "Chunk #": st.column_config.TextColumn("Chunk #", width="small"),
+            "Length": st.column_config.TextColumn("Length", width="small"),
+            "Preview": st.column_config.TextColumn("Content Preview", width="large"),
+            "Overlaps": st.column_config.TextColumn("Overlaps", width="medium")
+        },
+        hide_index=True,
+        use_container_width=True  # This makes the table use full container width
+    )
 
 def render_strategy_info(strategy_metadata: Dict[str, Any]) -> None:
     """Render information about the selected chunking strategy.
@@ -52,31 +78,38 @@ def render_strategy_info(strategy_metadata: Dict[str, Any]) -> None:
     Args:
         strategy_metadata (Dict[str, Any]): Strategy metadata from BaseChunker
     """
-    st.markdown("### Strategy Information")
+    # Create tabs for different aspects of the strategy
+    tab1, tab2, tab3 = st.tabs(["📖 Overview", "✨ Features", "⚙️ Settings"])
     
-    # Description
-    st.markdown("**Description:**")
-    st.write(strategy_metadata["description"])
+    with tab1:
+        st.markdown(f"### About {strategy_metadata['name']}")
+        st.info(strategy_metadata["description"])
     
-    # Advantages
-    st.markdown("**Advantages:**")
-    for pro in strategy_metadata["pros"]:
-        st.markdown(f"- {pro}")
+    with tab2:
+        # Create two columns for pros and cons
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("#### ✅ Advantages")
+            for pro in strategy_metadata["pros"]:
+                st.markdown(f"• {pro}")
+        
+        with col2:
+            st.markdown("#### ⚠️ Limitations")
+            for con in strategy_metadata["cons"]:
+                st.markdown(f"• {con}")
+        
+        st.markdown("#### 🎯 Best Use Cases")
+        for use_case in strategy_metadata["use_cases"]:
+            st.markdown(f"• {use_case}")
     
-    # Disadvantages
-    st.markdown("**Disadvantages:**")
-    for con in strategy_metadata["cons"]:
-        st.markdown(f"- {con}")
-    
-    # Use Cases
-    st.markdown("**Best Use Cases:**")
-    for use_case in strategy_metadata["use_cases"]:
-        st.markdown(f"- {use_case}")
-    
-    # Parameters
-    if strategy_metadata["parameters"]:
-        st.markdown("**Current Parameters:**")
-        st.json(strategy_metadata["parameters"])
+    with tab3:
+        if strategy_metadata["parameters"]:
+            st.markdown("#### Current Configuration")
+            for param, value in strategy_metadata["parameters"].items():
+                # Convert parameter name from snake_case to Title Case
+                param_name = " ".join(word.capitalize() for word in param.split("_"))
+                st.markdown(f"• **{param_name}:** {value}")
 
 def download_chunks_as_json(chunks: List[Chunk]) -> None:
     """Create a download button for chunks in JSON format.
@@ -85,14 +118,14 @@ def download_chunks_as_json(chunks: List[Chunk]) -> None:
         chunks (List[Chunk]): List of chunks to download
     """
     chunks_data = [{
-        "id": chunk.id,
+        "chunk_number": i + 1,
         "text": chunk.text,
-        "start_char": chunk.start_char,
-        "end_char": chunk.end_char,
         "length": chunk.length,
-        "overlap_prev": chunk.overlap_prev,
+        "start_position": chunk.start_char,
+        "end_position": chunk.end_char,
+        "overlap_previous": chunk.overlap_prev,
         "overlap_next": chunk.overlap_next
-    } for chunk in chunks]
+    } for i, chunk in enumerate(chunks)]
     
     df = pd.DataFrame(chunks_data)
     
@@ -100,18 +133,26 @@ def download_chunks_as_json(chunks: List[Chunk]) -> None:
     json_str = df.to_json(orient="records")
     csv_str = df.to_csv(index=False)
     
-    if json_str is not None:  # Ensure we have valid data
-        st.download_button(
-            "Download Chunks (JSON)",
-            json_str,
-            "chunks.json",
-            "application/json"
-        )
+    # Create a container for download buttons
+    st.markdown("#### 💾 Export Options")
+    col1, col2 = st.columns(2)
     
-    if csv_str is not None:  # Ensure we have valid data
-        st.download_button(
-            "Download Chunks (CSV)",
-            csv_str,
-            "chunks.csv",
-            "text/csv"
-        ) 
+    if json_str is not None:
+        with col1:
+            st.download_button(
+                "📥 Download as JSON",
+                json_str,
+                "chunks.json",
+                "application/json",
+                use_container_width=True
+            )
+    
+    if csv_str is not None:
+        with col2:
+            st.download_button(
+                "📥 Download as CSV",
+                csv_str,
+                "chunks.csv",
+                "text/csv",
+                use_container_width=True
+            ) 
