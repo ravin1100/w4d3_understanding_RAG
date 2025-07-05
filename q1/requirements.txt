@@ -1,0 +1,11 @@
+# FastMCP - Model Context Protocol framework
+fastmcp>=2.9.0
+
+# Environment variable management
+python-dotenv>=1.0.0
+
+# Data validation and parsing
+pydantic>=2.0.0
+
+# Discord API client
+discord.py
